@@ -1,0 +1,617 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sample reference architecture for GitHub Audit Log to CloudTrail Open Audit
+Parameters:
+  GitHubAuditLogS3Bucket:
+    Description: Source S3 bucket of GitHub Audit Log, enter existing or specify new bucket name
+    Type: String
+  CloudTrailLakeChannelArn:
+    Description: channel ARN that you setup from CloudTrail Lake integration for GitHub Audit Log
+    Type: String
+  CreateS3Bucket:
+    Description: Set to Yes if you want CloudFormation to create a new bucket
+    Type: String
+    Default: "yes"
+    AllowedValues:
+      - "yes"
+      - "no"
+  S3OriginAccount:
+    Description: Account Id that owned the S3 bucket, leave empty if the bucket is owned by this account
+    Type: String
+    Default: ""
+  GitHubAuditAllowList:
+    Description: Comma delimited list of GitHub Audit Event to be allowed for ingestion to CloudTrail Open Audit
+    Type: String
+    Default: "repo.*,org.*,enterprise.*,business.*,integration.*,git.*,secret_scanning.*,team.*,two_factor_authentication.*,user.*"
+  FunctionLogLevel:
+    Description: Set Lambda function logging level, default to INFO
+    Type: String
+    Default: INFO
+Globals:
+  Function:
+    Timeout: 30
+    Tracing: Active
+Conditions:
+  SameS3OriginAccount: !Equals [!Ref S3OriginAccount, ""]
+  CreateNewBucket: !Equals [!Ref CreateS3Bucket, "yes"]
+Mappings: 
+  Lambda:
+    FunctionName:  
+      S3Reader: GitHubS3ReaderFunction
+      CloudTrailIngest: GitHubIngestFunction
+Resources:
+  ## IAM 
+  GitHubS3ReaderFunctionRole:
+    Type: AWS::IAM::Role     
+    Properties:
+      Path: '/'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: "GitHubS3ReaderPolicy"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:              
+              - Sid: AllowReadS3Bucket
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                Resource:
+                  - !Sub 
+                    - arn:${AWS::Partition}:s3:::${BucketName}/*
+                    - BucketName: !Ref GitHubAuditLogS3Bucket
+              - Sid: AllowKMSToEncryptSQSMessage
+                Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource:
+                  - !GetAtt GitHubEncryptionKey.Arn
+              - Sid: AllowSQSSendMessage
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt GitHubS3ReaderQueue.Arn
+              - Sid: AllowSSMParameterAccess
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub 
+                    - 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterName}'
+                    - ParameterName: !Ref GitHubAuditAllowListSSM
+              - Sid: AllowToWriteCloudWatchLog
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 
+                    - 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${FunctionName}:*:*'
+                    - FunctionName: !Join 
+                        - "-"
+                        - - !FindInMap [Lambda, FunctionName, S3Reader]
+                          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+
+  GitHubIngestFunctionRole:
+    Type: AWS::IAM::Role     
+    Properties:
+      Path: '/'
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: "GitHubCloudTrailIngestPolicy"
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:              
+              - Sid: AllowKMSToEncryptSQSMessage
+                Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource:
+                  - !GetAtt GitHubEncryptionKey.Arn
+              - Sid: AllowSQSReceiveMessage
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt GitHubS3ReaderQueue.Arn
+              - Sid: AllowSQSSendMessage
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt GitHubTransformDLQ.Arn
+              - Sid: AllowCloudTrailPutAudit
+                Effect: Allow
+                Action:
+                  - cloudtrail-data:PutAuditEvents
+                Resource:
+                  - "*"
+              - Sid: AllowToWriteCloudWatchLog
+                Effect: Allow
+                Action:
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                Resource:
+                  - !Sub 
+                    - 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${FunctionName}:*:*'
+                    - FunctionName: !Join 
+                        - "-"
+                        - - !FindInMap [Lambda, FunctionName, CloudTrailIngest]
+                          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+              - Sid: AllowSSMParameterAccess
+                Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource:
+                  - !Sub 
+                    - 'arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterName}'
+                    - ParameterName: !Ref GitHubCloudTrailChannelSSM
+
+  ## KMS
+  GitHubEncryptionKey:
+    Type: AWS::KMS::Key
+    Properties: 
+      Description: KMS key to encrypt all content in the SQS for GitHub Lambda function integration
+      EnableKeyRotation: True
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: GitHub-Key-Policy
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+            Action: 'kms:*'
+            Resource: '*'
+          - Sid: AllowServiceCloudWatchLogGroup
+            Effect: Allow
+            Principal:
+              Service: !Sub 'logs.${AWS::Region}.amazonaws.com'
+            Action:
+            - 'kms:Encrypt'
+            - 'kms:Decrypt'
+            - 'kms:ReEncrypt*'
+            - 'kms:GenerateDataKey*'
+            - 'kms:Describe'
+            Resource: '*'
+            Condition:
+              ArnEquals:
+                'kms:EncryptionContext:aws:logs:arn': 
+                  - !Sub 
+                    - arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}
+                    - LogGroupName: !Join 
+                      - ""
+                      - - "/aws/lambda/"
+                        - !FindInMap [Lambda, FunctionName, CloudTrailIngest]
+                        - "-"
+                        - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+                  - !Sub 
+                    - arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:${LogGroupName}
+                    - LogGroupName: !Join 
+                      - ""
+                      - - "/aws/lambda/"
+                        - !FindInMap [Lambda, FunctionName, S3Reader]
+                        - "-"
+                        - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+    Metadata:
+      checkov:
+        skip:
+          - id: "CKV_AWS_33"
+            comment: "Using wildcard for principal since we are doing Deny"
+      cfn-lint:
+        config:
+          ignore_checks:
+            - I1022 # use empty delimeter for !Join
+
+  GitHubEncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Properties: 
+      AliasName: alias/GitHubCloudTrailOpenEvent
+      TargetKeyId: !Ref GitHubEncryptionKey
+
+  ## SQS
+  GitHubS3ReaderQueue:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties: 
+      MessageRetentionPeriod: 1209600
+      KmsMasterKeyId: !GetAtt GitHubEncryptionKey.Arn
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt GitHubS3ReaderDLQ.Arn
+        maxReceiveCount: 3
+ 
+  GitHubS3ReaderQueuePolicy: 
+    Type: AWS::SQS::QueuePolicy
+    Properties: 
+      Queues: 
+        - !Ref GitHubS3ReaderQueue
+      PolicyDocument: 
+        Statement: 
+          - Sid: "AllowOwner"
+            Action: 
+              - "SQS:*" 
+            Effect: "Allow"
+            Resource: !GetAtt GitHubS3ReaderQueue.Arn
+            Principal:  
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+          - Sid: "DenyNonHTTPS"
+            Action: 
+              - "SQS:*" 
+            Effect: "Deny"
+            Resource: !GetAtt GitHubS3ReaderQueue.Arn
+            Principal: "*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+    Metadata:
+      BuildMethod: python3.8
+      cfn_nag:
+        rules_to_suppress:
+          - id: F20
+            reason: "Using * in SQS policy for wide deny statement"
+
+  GitHubS3ReaderDLQ:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties: 
+      MessageRetentionPeriod: 1209600
+      KmsMasterKeyId: !GetAtt GitHubEncryptionKey.Arn
+
+  GitHubS3ReaderDLQPolicy: 
+    Type: AWS::SQS::QueuePolicy
+    Properties: 
+      Queues: 
+        - !Ref GitHubS3ReaderDLQ
+      PolicyDocument: 
+        Statement: 
+          - Sid: "AllowOwner"
+            Action: 
+              - "SQS:*" 
+            Effect: "Allow"
+            Resource: !GetAtt GitHubS3ReaderDLQ.Arn
+            Principal:  
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+          - Sid: "DenyNonHTTPS"
+            Action: 
+              - "SQS:*" 
+            Effect: "Deny"
+            Resource: !GetAtt GitHubS3ReaderDLQ.Arn
+            Principal: "*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+    Metadata:
+      BuildMethod: python3.8
+      cfn_nag:
+        rules_to_suppress:
+          - id: F20
+            reason: "Using * in SQS policy for wide deny statement"
+
+  GitHubTransformDLQ:
+    Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
+    Properties: 
+      MessageRetentionPeriod: 1209600
+      KmsMasterKeyId: !GetAtt GitHubEncryptionKey.Arn
+      FifoQueue: True
+
+  GitHubTransformDLQPolicy: 
+    Type: AWS::SQS::QueuePolicy
+    Properties: 
+      Queues: 
+        - !Ref GitHubTransformDLQ
+      PolicyDocument: 
+        Statement: 
+          - Sid: "AllowOwner"
+            Action: 
+              - "SQS:*" 
+            Effect: "Allow"
+            Resource: !GetAtt GitHubTransformDLQ.Arn
+            Principal:  
+              AWS: !Sub 'arn:${AWS::Partition}:iam::${AWS::AccountId}:root'
+          - Sid: "DenyNonHTTPS"
+            Action: 
+              - "SQS:*" 
+            Effect: "Deny"
+            Resource: !GetAtt GitHubTransformDLQ.Arn
+            Principal: "*"
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+    Metadata:
+      BuildMethod: python3.8
+      cfn_nag:
+        rules_to_suppress:
+          - id: F20
+            reason: "Using * in SQS policy for wide deny statement"
+
+  ## SSM Parameter
+  GitHubAuditAllowListSSM:
+    Type: AWS::SSM::Parameter
+    Properties: 
+      DataType: text
+      Description: Allow list of GitHub Audit event for ingestion to CloudTrail Open Audit
+      Name: /github/GitHubAuditAllowList
+      Tier: Intelligent-Tiering
+      Type: StringList
+      Value: !Ref GitHubAuditAllowList
+
+  GitHubCloudTrailChannelSSM:
+    Type: AWS::SSM::Parameter
+    Properties: 
+      DataType: text
+      Description: CloudTrail Lake Channel ARN for GitHub audit log integration
+      Name: /github/GitHubCloudTrailChannel
+      Tier: Intelligent-Tiering
+      Type: String
+      Value: !Ref CloudTrailLakeChannelArn
+
+  ## Lambda function
+  GitHubS3ReaderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join 
+        - "-"
+        - - !FindInMap [Lambda, FunctionName, S3Reader]
+          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+      Description: Read S3 bucket containing GitHub Audit Log and filter and send result to SQS for batch update to CloudTrail
+      CodeUri: lambda/s3-reader/
+      Handler: s3-reader.lambda_handler
+      Role: !GetAtt GitHubS3ReaderFunctionRole.Arn
+      Runtime: python3.8
+      ReservedConcurrentExecutions: 10
+      Tracing: PassThrough
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          log_level: !Ref FunctionLogLevel
+          github_event_allow_list: !Ref GitHubAuditAllowListSSM
+          gh_ingest_queue: !Ref GitHubS3ReaderQueue
+    Metadata:
+      BuildMethod: python3.8
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Function role has write access to CloudWatch Log"
+          - id: W89
+            reason: "VPC is not required"
+      checkov:
+        skip:
+          - id: "CKV_AWS_117"
+            comment: "VPC is not required"
+          - id: "CKV_AWS_116"
+            comment: "Source SQS will have its own DLQ"
+          - id: "CKV_AWS_173"
+            comment: "No confidential data in Env Var"
+
+  GitHubIngestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Join 
+        - "-"
+        - - !FindInMap [Lambda, FunctionName, CloudTrailIngest]
+          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+      Description: Read GitHub Audit log events, transform and push it to CloudTrail Open Audit
+      CodeUri: lambda/cloudtrail-ingest/
+      Handler: cloudtrail-ingest.lambda_handler
+      Role: !GetAtt GitHubIngestFunctionRole.Arn
+      Runtime: python3.8
+      ReservedConcurrentExecutions: 10
+      Tracing: PassThrough
+      Architectures:
+        - x86_64
+      Layers: 
+        - !Ref BetaBotoLayer
+      Environment:
+        Variables:
+          log_level: !Ref FunctionLogLevel
+          github_transform_dlq: !Ref GitHubTransformDLQ
+          github_cloudtrail_channel: !Ref GitHubCloudTrailChannelSSM
+      Events:
+        Stream:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: True
+            MaximumBatchingWindowInSeconds: 30
+            Queue: !GetAtt GitHubS3ReaderQueue.Arn
+    Metadata:
+      BuildMethod: python3.8
+      cfn_nag:
+        rules_to_suppress:
+          - id: W58
+            reason: "Function role has write access to CloudWatch Log"
+          - id: W89
+            reason: "VPC is not required"
+      checkov:
+        skip:
+          - id: "CKV_AWS_117"
+            comment: "VPC is not required"
+          - id: "CKV_AWS_116"
+            comment: "Transform logic has exception to send to DLQ"
+          - id: "CKV_AWS_173"
+            comment: "No confidential data in Env Var"
+
+  ## Beta layer
+  BetaBotoLayer:
+    Type: AWS::Lambda::LayerVersion
+    Properties:
+      CompatibleRuntimes:
+        - python3.8
+        - python3.9
+      Content:
+        S3Bucket: 'vinjak-archive'
+        S3Key: p_boto3.zip
+      Description: Layer for beta version of boto3
+      LayerName: !Sub "latest-boto-${AWS::StackName}"
+
+  ## Lambda invoke permission
+  GitHubS3ReaderFunctionEvent:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt GitHubS3ReaderFunction.Arn
+      Principal: s3.amazonaws.com
+      SourceAccount: !If [SameS3OriginAccount, !Ref "AWS::AccountId", S3OriginAccount]
+      SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${GitHubAuditLogS3Bucket}'
+
+  GitHubIngestFunctionEvent:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !GetAtt GitHubIngestFunction.Arn
+      Principal: s3.amazonaws.com
+      SourceAccount: !If [SameS3OriginAccount, !Ref "AWS::AccountId", S3OriginAccount]
+      SourceArn: !Sub 'arn:${AWS::Partition}:s3:::${GitHubAuditLogS3Bucket}'
+
+  ## Lambda log group
+  GitHubS3ReaderLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Join 
+        - ""
+        - - "/aws/lambda/"
+          - !FindInMap [Lambda, FunctionName, S3Reader]
+          - "-"
+          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+      RetentionInDays: 120
+      KmsKeyId: !GetAtt GitHubEncryptionKey.Arn
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - I1022 # use empty delimeter for !Join
+
+  GitHubIngestLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      LogGroupName: !Join 
+        - ""
+        - - "/aws/lambda/"
+          - !FindInMap [Lambda, FunctionName, CloudTrailIngest]
+          - "-"
+          - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
+      RetentionInDays: 120
+      KmsKeyId: !GetAtt GitHubEncryptionKey.Arn
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - I1022 # use empty delimeter for !Join
+
+  ## S3 Bucket
+  GitHubAuditEventS3:
+    Condition: CreateNewBucket
+    DependsOn: 
+      - GitHubS3ReaderFunctionEvent
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Ref GitHubAuditLogS3Bucket
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: !GetAtt GitHubEncryptionKey.Arn
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      VersioningConfiguration:
+        Status: Enabled
+      IntelligentTieringConfigurations:
+        - Id: Tier1
+          Status: Enabled
+          Tierings:
+            - AccessTier: ARCHIVE_ACCESS
+              Days: 90
+      LifecycleConfiguration:
+        Rules:
+          - Id: 'IntelligentTier'
+            Status: Enabled
+            Transitions:
+              - StorageClass: INTELLIGENT_TIERING
+                TransitionInDays: '0'
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Function: !GetAtt GitHubS3ReaderFunction.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: ".json.log.gz"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: "Access Log is not required"
+      checkov:
+        skip:
+          - id: "CKV_AWS_18"
+            comment: "Access Log is not required"
+
+  GitHubAuditEventBucketPolicy:
+    Condition: CreateNewBucket
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      PolicyDocument:
+        Id: S3BucketPolicy
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowSSLRequestsOnly
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource:
+              - !Join ['',['arn:aws:s3:::',!Ref GitHubAuditLogS3Bucket]]
+              - !Join ['',['arn:aws:s3:::',!Ref GitHubAuditLogS3Bucket, /*]]
+            Condition:
+              Bool:
+                aws:SecureTransport: false
+      Bucket: !Ref GitHubAuditEventS3
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - I1022 # use empty delimeter for !Join
+
+Outputs:
+  GitHubS3ReaderFunction:
+    Description: Lambda function triggered by S3 bucket event from GitHub Audit Log streaming
+    Value: !GetAtt GitHubS3ReaderFunction.Arn
