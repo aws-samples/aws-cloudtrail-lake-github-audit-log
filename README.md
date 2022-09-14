@@ -1,7 +1,7 @@
 # GitHub Audit Log to CloudTrail Lake Integration
 
 ## Introduction
-A reference architecture to integrate GitHub Audit Log to AWS CloudTrail Lake. This solution uses GitHub Audit Log streaming to S3 as the data source, transform and send the events to CloudTrail Lake data store. 
+A reference architecture to integrate GitHub Audit Log to AWS CloudTrail Lake. This solution uses GitHub Audit Log streaming to Amazonn S3 as the data source, transform and send the events to CloudTrail Lake data store. 
 
 ![architecture overview](./assets/img/architecture.png)
 
@@ -11,14 +11,15 @@ A reference architecture to integrate GitHub Audit Log to AWS CloudTrail Lake. T
 
 You must have access as GitHub Enterprise Account owner to configure Audit Log Streaming to S3. To learn more about GitHub audit log, check the [GitHub documentation](https://docs.github.com/en/enterprise-cloud@latest/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/about-the-audit-log-for-your-enterprise)
 
-You can create your own S3 bucket and supply it as parameter in the deployment below. Additionally you can choose to create a new bucket and configure your GitHub Audit Log Streaming to the new S3 bucket as destination.
+You can create your own S3 bucket and supply it as a parameter in the deployment below. Additionally, you can choose to create a new bucket and configure your GitHub Audit Log Streaming to the new S3 bucket as destination.
 
 ### Initiate the CloudTrail Lake integration
 
-* To start the integration, navigate to the AWS CloudTrail Lake integrations console. 
-* Choose the **Available applications** tab and select GitHub from the list of available applications. 
+* To start the integration, navigate to the AWS CloudTrail console. 
+* Choose **Lake**, **Integrations** and **Available applications** tab.
+* Select **GitHub** from the list of available applications. 
 * Select **Add Integration** and update the integration name as required or keep the default value.
-* Choose the event delivery location. You can choose existing CloudTrail Lake event data stores or create a new event data store for GitHub. 
+* Under **Event delivery location**, you can choose existing event data stores or create a new event data store for GitHub.  
 * On the **Permission settings**, select **GitHub** as the partner integration. The IAM role permissions is configured separately as per instruction on section below. 
 * Add optional tags as required and select **Add integration** to confirm.
 * After you initiated the integration, a dedicated channel is configured to allow the solution to send GitHub audit log. 
@@ -107,7 +108,7 @@ SELECT
     eventData.requestParameters as requestParameters
     eventData.userIdentity.type as eventType 
 FROM 
-    {{replace with your data store id}}
+    {{replace with your event data store id}}
 WHERE 
     eventData.eventSource = 'github.audit.streaming' and 
     eventTime > '2022-08-31 00:00:00' and eventTime < '2022-09-30 00:00:00
