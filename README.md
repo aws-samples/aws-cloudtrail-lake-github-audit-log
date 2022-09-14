@@ -1,7 +1,7 @@
 # GitHub Audit Log to CloudTrail Lake Integration
 
 ## Introduction
-A reference architecture to integrate GitHub Audit Log to AWS CloudTrail Lake. This solution uses GitHub Audit Log streaming to Amazonn S3 as the data source, transform and send the events to CloudTrail Lake data store. 
+A reference architecture to integrate GitHub Audit Log to AWS CloudTrail Lake. This solution uses GitHub Audit Log streaming to Amazon S3 as the data source, transform and send the events to CloudTrail Lake data store. 
 
 ![architecture overview](./assets/img/architecture.png)
 
