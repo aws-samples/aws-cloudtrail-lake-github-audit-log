@@ -37,7 +37,7 @@ s3 = session.resource("s3")
 sqs = session.client("sqs")
 sts = session.client('sts')
 ssm = session.client("ssm")
-cloudtrail_open_audit = session.client('cloudtraildata')
+cloudtrail_open_audit = session.client('cloudtrail-data')
 RECIPIENT_ACCOUNT_ID = sts.get_caller_identity()['Account']
 
 try:
