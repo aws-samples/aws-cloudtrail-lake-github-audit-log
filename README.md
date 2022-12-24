@@ -15,49 +15,28 @@ You can create your own S3 bucket and supply it as parameter in the deployment b
 
 ### Initiate the CloudTrail Lake integration
 
-* To start the integration, navigate to the AWS CloudTrail Lake integrations console. 
-* Choose the **Available applications** tab and select GitHub from the list of available applications. 
-* Select **Add Integration** and update the integration name as required or keep the default value.
-* Choose the event delivery location. You can choose existing CloudTrail Lake event data stores or create a new event data store for GitHub. 
-* On the **Permission settings**, select **GitHub** as the partner integration. The IAM role permissions is configured separately as per instruction on section below. 
-* Add optional tags as required and select **Add integration** to confirm.
-* After you initiated the integration, a dedicated channel is configured to allow the solution to send GitHub audit log. 
-* Locate the newly created GitHub integration from the **Managed integrations** tab, copy the **Channel ARN** value and follow the remaining steps below.
+* To start the integration, navigate to the AWS CloudTrail Lake integration console and select GitHub from the list of available applications. 
+* Select **Add Integration** and you will be prompted to select the event delivery location. You can choose existing CloudTrail Lake event data stores or create a new event data store for GitHub. 
+* For this integration, the IAM role permissions is configured separately via SAM. 
+* Add optional tags and select **Add integration** to confirm.
+
+After you initiated the integration, a dedicated channel is configured to allow the solution to send GitHub audit log. To activate this integration, copy the channel ARN value and follow the remaining steps below.
+
+### Deploy using Terraform 
+
+Refer to the [Terraform module documentation](./terraform/terraform-aws-cloudtrail-lake-github-audit-log/README.md) to get started.
 
 ### Deploy using SAM CLI
 
-To use the SAM CLI, you need the following tools installed:
-* SAM CLI - [Install the SAM CLI](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-install.html)
-* [Python 3 installed](https://www.python.org/downloads/)
-* Docker - [Install Docker community edition](https://hub.docker.com/search/?type=edition&offering=community)
-
-Clone this repository to your workspace area. SAM CLI should be configured with AWS credentials from the AWS account where you plan to store CloudTrail Lake data store. Run the following in your shell:
-
-```bash
-cd sam
-sam build
-sam deploy --guided
-```
-
-**Parameters:**
-Enter the following parameters or use the default values:
-
-- CloudTrailLakeChannelArn: Channel ARN that you setup from CloudTrail Lake integration for GitHub Audit Log.
-- CreateS3Bucket: Set to Yes if you want CloudFormation to create a new bucket.
-- S3OriginAccount: AWS account Id that own the S3 bucket, leave empty if the bucket is owned by this account.
-- GitHubAuditLogS3Bucket: Source S3 bucket of GitHub Audit Log, enter existing or specify new bucket name.
-- GitHubAuditAllowList: Comma delimited list of GitHub Audit Event to be allowed for ingestion to CloudTrail Open Audit. **Important:** The default value includes: `repo.*,org.*,enterprise.*,business.*,integration.*,git.*,secret_scanning.*,team.*,two_factor_authentication.*,user.*` , adjust this accordingly.
-- FunctionLogLevel: Set Lambda function logging level, default to INFO
-
-For full list of available GitHub audit log event, check the [GitHub documentation](https://docs.github.com/en/enterprise-server@3.4/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/audit-log-events-for-your-enterprise)
+Refer to the [SAM directory](./SAM/README.md) to get started.
 
 ### (Optional) Using existing S3 bucket
 
 If you use an existing S3 bucket, follow instruction below to setup S3 event to Lambda function.
 
-Take the `GitHubS3ReaderFunction` ARN output value from the SAM cli output on the section earlier. The format will be: `arn:aws:lambda:{region}}:{account id}:function:GitHubS3ReaderFunction-{random-id}`
+Take the `GitHubS3ReaderFunction` ARN value from the SAM cli output or `github_auditlog_s3bucket` ARN value from the Terraform module output. The format will be: `arn:aws:lambda:{region}}:{account id}:function:GitHubS3ReaderFunction-{random-id}`
 
-Run command below to create S3 event notification configuration, replace the placeholder for Lambda ARN wit the value from SAM cli output.
+Run command below to create S3 event notification configuration, replace the placeholder for Lambda ARN wit the value from SAM / Terraform module output.
 ```
 LAMBDA_FUNCTION_ARN="{{change this with Lambda Arn from the SAM cli output}}"
 cat << EOF > notification.json
@@ -181,11 +160,4 @@ To monitor the cost, use [AWS Budgets](https://aws.amazon.com/aws-cost-managemen
 
 
 ## Additional Information
-
 To learn more about CloudTrail Lake, check the [documentation on AWS page](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-lake.html).
-## Security
-
-See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more information.
-
-## License
-This library is licensed under the MIT-0 License. See the LICENSE file.

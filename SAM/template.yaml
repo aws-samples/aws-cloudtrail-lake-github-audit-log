@@ -380,7 +380,7 @@ Resources:
         - - !FindInMap [Lambda, FunctionName, S3Reader]
           - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
       Description: Read S3 bucket containing GitHub Audit Log and filter and send result to SQS for batch update to CloudTrail
-      CodeUri: lambda/s3-reader/
+      CodeUri: ../sources/lambda/s3-reader/
       Handler: s3-reader.lambda_handler
       Role: !GetAtt GitHubS3ReaderFunctionRole.Arn
       Runtime: python3.8
@@ -418,7 +418,7 @@ Resources:
         - - !FindInMap [Lambda, FunctionName, CloudTrailIngest]
           - !Select [4, !Split ['-', !Select [2, !Split ['/', !Ref AWS::StackId]]]]
       Description: Read GitHub Audit log events, transform and push it to CloudTrail Open Audit
-      CodeUri: lambda/cloudtrail-ingest/
+      CodeUri: ../sources/lambda/cloudtrail-ingest/
       Handler: cloudtrail-ingest.lambda_handler
       Role: !GetAtt GitHubIngestFunctionRole.Arn
       Runtime: python3.8
@@ -467,7 +467,7 @@ Resources:
         - python3.9
       Content:
         S3Bucket: 'vinjak-archive'
-        S3Key: p_boto3.zip
+        S3Key: l_boto3.zip
       Description: Layer for beta version of boto3
       LayerName: !Sub "latest-boto-${AWS::StackName}"
 

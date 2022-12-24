@@ -112,7 +112,7 @@ fabric.properties
 
 # Sonarlint plugin
 .idea/sonarlint
-
+git@github.com:wellsiau-aws/aws-cloudtrail-lake-github-audit-log.git
 ### Python ###
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -249,3 +249,14 @@ $RECYCLE.BIN/
 # End of https://www.gitignore.io/api/osx,linux,python,windows,pycharm,visualstudiocode
 .vscode/launch.json
 SAM/notification.json
+
+# Local .terraform directories
+**/.terraform/*
+# Terraform lock file
+**/.terraform.lock.hcl
+# .tfstate files
+*.tfstate
+*.tfstate.*
+# Var files 
+*.tfvars
+aggregated_results.txt
