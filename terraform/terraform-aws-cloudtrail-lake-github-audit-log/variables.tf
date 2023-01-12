@@ -12,7 +12,7 @@ variable "create_github_auditlog_s3bucket" {
   description = "If `true` the module will create the bucket github_auditlog_s3bucket."
   default     = false
   validation {
-    condition = contains([true, false], var.create_github_auditlog_s3bucket)
+    condition     = contains([true, false], var.create_github_auditlog_s3bucket)
     error_message = "Valid value for create_github_auditlog_s3bucket is true or false"
   }
 }
@@ -67,15 +67,15 @@ variable "lambda_log_level" {
   description = "Set Lambda function logging level, default to INFO"
   default     = "INFO"
   validation {
-    condition = contains(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], var.lambda_log_level)
+    condition     = contains(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], var.lambda_log_level)
     error_message = "Valid log level is one of the following: DEBUG, INFO, WARNING, ERROR, CRITICAL"
   }
 }
 
 variable "lambda_source_path" {
-  type = string
+  type        = string
   description = "Path to the Lambda function source code, default to ./sources/lambda directory in the repository root. Modify this if you move the Terrform module working directory."
-  default = "../../sources/lambda"
+  default     = "../../sources/lambda"
 }
 
 variable "tags" {

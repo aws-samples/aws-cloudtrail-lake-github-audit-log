@@ -1,14 +1,3 @@
-## Beta layer
-resource "aws_lambda_layer_version" "github_ingest" {
-  layer_name  = "github_ingest"
-  description = "Layer for beta version of boto3"
-
-  s3_bucket = "vinjak-archive"
-  s3_key    = "l_boto3.zip"
-
-  compatible_runtimes = ["python3.8"]
-}
-
 resource "aws_lambda_function" "github_ingest" {
   #checkov:skip=CKV_AWS_173:No sensitive information stored in Lambda environment variables
   #checkov:skip=CKV_AWS_117:This Lambda doesn't need VPC
@@ -39,8 +28,6 @@ resource "aws_lambda_function" "github_ingest" {
       github_cloudtrail_channel = split("parameter", aws_ssm_parameter.github_cloudtrail_channel.arn)[1]
     }
   }
-
-  layers = [aws_lambda_layer_version.github_ingest.arn]
 
   tags = var.tags
 }

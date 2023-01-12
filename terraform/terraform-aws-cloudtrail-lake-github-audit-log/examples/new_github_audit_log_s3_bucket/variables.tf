@@ -12,7 +12,7 @@ variable "create_github_auditlog_s3bucket" {
   description = "If `true` the module will create the bucket github_auditlog_s3bucket."
   default     = false
   validation {
-    condition = contains([true, false], var.create_github_auditlog_s3bucket)
+    condition     = contains([true, false], var.create_github_auditlog_s3bucket)
     error_message = "Valid value for create_github_auditlog_s3bucket is true or false"
   }
 }

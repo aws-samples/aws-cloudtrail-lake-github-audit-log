@@ -426,8 +426,6 @@ Resources:
       Tracing: PassThrough
       Architectures:
         - x86_64
-      Layers: 
-        - !Ref BetaBotoLayer
       Environment:
         Variables:
           log_level: !Ref FunctionLogLevel
@@ -457,19 +455,6 @@ Resources:
             comment: "Transform logic has exception to send to DLQ"
           - id: "CKV_AWS_173"
             comment: "No confidential data in Env Var"
-
-  ## Beta layer
-  BetaBotoLayer:
-    Type: AWS::Lambda::LayerVersion
-    Properties:
-      CompatibleRuntimes:
-        - python3.8
-        - python3.9
-      Content:
-        S3Bucket: 'vinjak-archive'
-        S3Key: l_boto3.zip
-      Description: Layer for beta version of boto3
-      LayerName: !Sub "latest-boto-${AWS::StackName}"
 
   ## Lambda invoke permission
   GitHubS3ReaderFunctionEvent:
