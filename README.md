@@ -18,9 +18,11 @@ You can create your own S3 bucket and supply it as a parameter in the deployment
 * To start the integration, navigate to the AWS CloudTrail console. 
 * Choose **Lake**, **Integrations** and **Available applications** tab.
 * Select **GitHub** from the list of available applications. 
-* Select **Add Integration** and update the integration name as required or keep the default value.
-* Under **Event delivery location**, you can choose existing event data stores or create a new event data store for GitHub.  
-* On the **Permission settings**, select **GitHub** as the partner integration. The IAM role permissions is configured separately as per instruction on section below. 
+* Select **Add Integration** 
+* Under **Integration details** update the integration name as required or keep the default value.
+* Under **Event delivery location**, choose existing event data stores or create a new event data store for GitHub.  
+* Under **Resource policy** section, leave the default resource policy if you deploying the solution on the same AWS account where CloudTrail Lake is running. 
+  * **Optional** : if you deploying the solution on separate AWS account, select **Add AWS account** and enter the account id.
 * Add optional tags as required and select **Add integration** to confirm.
 * After you initiated the integration, a dedicated channel is configured to allow the solution to send GitHub audit log. 
 * Locate the newly created GitHub integration from the **Managed integrations** tab, copy the **Channel ARN** value and follow the remaining steps below.
