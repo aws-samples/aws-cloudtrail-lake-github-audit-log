@@ -81,14 +81,14 @@ data "aws_iam_policy_document" "github_encryption_key" {
       identifiers = [
         "logs.${local.context.aws_region_name}.amazonaws.com"
       ]
-    }  
+    }
     condition {
       test     = "ArnEquals"
       variable = "kms:EncryptionContext:aws:logs:arn"
-      values   = [
+      values = [
         "arn:${local.context.aws_partition_id}:logs:${local.context.aws_region_name}:${local.context.aws_caller_identity_account_id}:log-group:/aws/lambda/${var.lambda_function_name_s3_reader}",
         "arn:${local.context.aws_partition_id}:logs:${local.context.aws_region_name}:${local.context.aws_caller_identity_account_id}:log-group:/aws/lambda/${var.lambda_function_name_cloudtrail_ingest}"
-        ]
+      ]
     }
   }
 }
