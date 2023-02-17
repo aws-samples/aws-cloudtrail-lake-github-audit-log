@@ -7,6 +7,11 @@ This module can be used to integrate GitHub Audit Log to AWS CloudTrail Lake. Th
 
 You must complete the [general prerequisites](../../README.md#general-prerequisites) as referenced in the solution README before deploying this module.
 
+Build the lambda by running the following command
+```
+make all
+```
+
 The example below will deploy the module with a new S3 bucket for GitHub audit log.
 
 ```
