@@ -15,10 +15,10 @@ locals {
   lambda_timeout = 30
   lambda_runtime = "python3.8"
 
-  lambda_source_path_s3reader = "${path.module}/${var.lambda_source_path}/s3-reader"
+  lambda_source_path_s3reader = "${path.module}/${var.lambda_source_path}/s3-reader/site-packages/"
   lambda_output_path_s3reader = "${path.module}/${var.lambda_source_path}/s3-reader.zip"
 
-  lambda_source_path_ingest = "${path.module}/${var.lambda_source_path}/cloudtrail-ingest"
+  lambda_source_path_ingest = "${path.module}/${var.lambda_source_path}/cloudtrail-ingest/site-packages/"
   lambda_output_path_ingest = "${path.module}/${var.lambda_source_path}/cloudtrail-ingest.zip"
 
   sqs_retention = 1209600

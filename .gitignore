@@ -260,3 +260,15 @@ SAM/notification.json
 # Var files 
 *.tfvars
 aggregated_results.txt
+
+
+# Ignore CLI configuration files
+.terraformrc
+terraform.rc
+
+# Ignore generated buildfiles
+**/build/*
+**/build/
+**/site-packages/*
+**/site-packages/
+**/sources/**/*.zip
