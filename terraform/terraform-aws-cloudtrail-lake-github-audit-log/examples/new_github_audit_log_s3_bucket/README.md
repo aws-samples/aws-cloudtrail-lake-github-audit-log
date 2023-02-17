@@ -3,6 +3,11 @@
 
 The example deploy the integration of GitHub Audit Log to AWS CloudTrail Lake with a new S3 bucket for GitHub audit log. After the module is deployed, use the module output S3 bucket name to configure GitHub audit log. Check the guide [Setting up streaming to Amazon S3](https://docs.github.com/en/enterprise-cloud@latest/admin/monitoring-activity-in-your-enterprise/reviewing-audit-logs-for-your-enterprise/streaming-the-audit-log-for-your-enterprise#setting-up-streaming-to-amazon-s3).
 
+Build the lambda by running the following command
+```
+make all
+```
+
 ## Requirements
 
 | Name | Version |
